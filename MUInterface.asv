@@ -1,0 +1,1635 @@
+function mainGUI()
+    %% Global Variable Declaration
+    global cv_manual recruitment_force derecruitment_force cv_auto cv_final;
+    global SIG MUPulses MUIDs ref_signal force time;
+    global fsamp singleDiffCheckbox dataPath;
+    global p2pResults maxP2pResults avgP2pResults minP2pResults rmsResults MU_ID;
+    global MUAPs MUAPp2p MUAPrms;
+
+    %% Initialization
+    cv_manual = {}; 
+    recruitment_force = {}; 
+    derecruitment_force = {}; 
+    cv_auto = {}; 
+    cv_final = {};
+    MUAPs = {}; 
+    MU_ID = {}; 
+    p2pResults = {}; 
+    maxP2pResults = []; 
+    avgP2pResults = []; 
+    minP2pResults = []; 
+    rmsResults = {}; 
+    MUAPp2p = {}; 
+    MUAPrms = {};
+    SIG = [];
+    MUPulses = [];
+    MUIDs = [];
+    ref_signal = [];
+    force = [];
+    time = [];
+    dataPath = 'C:\Data\Demuse Data\Luigi\SMA03\W3_20230608\Decomposition Output\';
+    fsamp = 4000;
+
+    %% Main Window for Inputs
+    mainWindow = figure('Name', 'Motor Unit GUI - Neuromechatronics Lab', 'Position', [100, 100, 975, 500], 'Color', [0.94 0.94 0.94]);
+
+    % Panel for Load Data and Options (Column 1)
+    panel1 = uipanel('Parent', mainWindow, 'Title', 'Load Data', 'FontSize', 12, 'BackgroundColor', 'white', 'Position', [0.05 0.735 0.55 0.2]);
+    uicontrol('Parent', panel1, 'Style', 'pushbutton', 'String', 'Load Data', 'Position', [20, 20, 150, 30], 'Callback', @loadDataCallback);
+    singleDiffCheckbox = uicontrol('Parent', panel1, 'Style', 'checkbox', 'String', 'Double Differential', 'Position', [200, 20, 150, 20], 'Value', 1);
+
+    % Panel for CV Calculation (Column 1)
+    panel2 = uipanel('Parent', mainWindow, 'Title', 'CV Calculator', 'FontSize', 12, 'BackgroundColor', 'white', 'Position', [0.05 0.555 0.55 0.15]);
+    uicontrol('Parent', panel2, 'Style', 'pushbutton', 'String', 'Automatic', 'Position', [20, 20, 150, 30], 'Callback', @automaticCVCallback);
+    uicontrol('Parent', panel2, 'Style', 'pushbutton', 'String', 'CV Investigator', 'Position', [200, 20, 150, 30], 'Callback', @openVisWindow);
+
+    % Panel for Recruitment and Derecruitment Threshold Calculation
+    panel3 = uipanel('Parent', mainWindow, 'Title', 'Threshold Calculations', 'FontSize', 12, ...
+                     'BackgroundColor', 'white', 'Position', [0.05 0.225 0.55 0.3]);
+    
+    % Number of Firings Input
+    uicontrol('Parent', panel3, 'Style', 'text', 'String', 'Number of Firings (n):', ...
+              'Position', [20, 70, 150, 20], 'HorizontalAlignment', 'left');
+    nEdit = uicontrol('Parent', panel3, 'Style', 'edit', 'Position', [180, 70, 100, 25]);
+    
+    % Start Time Input
+    uicontrol('Parent', panel3, 'Style', 'text', 'String', 'Start Time (s):', ...
+              'Position', [20, 40, 150, 20], 'HorizontalAlignment', 'left');
+    startTimeEdit = uicontrol('Parent', panel3, 'Style', 'edit', 'Position', [180, 40, 100, 25]);
+    
+    % End Time Input
+    uicontrol('Parent', panel3, 'Style', 'text', 'String', 'End Time (s):', ...
+              'Position', [20, 10, 150, 20], 'HorizontalAlignment', 'left');
+    endTimeEdit = uicontrol('Parent', panel3, 'Style', 'edit', 'Position', [180, 10, 100, 25]);
+    
+    % Calculate Recruitment Threshold Button
+    uicontrol('Parent', panel3, 'Style', 'pushbutton', 'String', 'Calculate Recruitment Threshold', ...
+              'Position', [320, 90, 200, 30], 'Callback', @calculateRecruitmentThresholdCallback);
+    
+    % Calculate Derecruitment Threshold Button
+    uicontrol('Parent', panel3, 'Style', 'pushbutton', 'String', 'Calculate Derecruitment Threshold', ...
+              'Position', [320, 50, 200, 30], 'Callback', @calculateDerecruitmentThresholdCallback);
+    
+    % Button for plotting Recruitment vs Derecruitment Forces
+    uicontrol('Parent', panel3, 'Style', 'pushbutton', 'String', 'Plot Rec vs DeRec Forces', ...
+              'Position', [320, 10, 200, 30], 'Callback', @plotRecVsDeRecCallback);
+
+    % Panel for Results (Column 1)
+    panel4 = uipanel('Parent', mainWindow, 'Title', 'Results', 'FontSize', 12, 'BackgroundColor', 'white', 'Position', [0.05 0.05 0.55 0.15]);
+    uicontrol('Parent', panel4, 'Style', 'pushbutton', 'String', 'Show Results', 'Position', [20, 10, 150, 30], 'Callback', @showResultsCallback);
+    uicontrol('Parent', panel4, 'Style', 'pushbutton', 'String', 'Save in Excel', 'Position', [200, 10, 150, 30], 'Callback', @saveInExcelCallback);
+
+    % Panel for Convex Hull Measurements (Column 2)
+    panel5 = uipanel('Parent', mainWindow, 'Title', 'Convex Hull Measurements', 'FontSize', 12, 'BackgroundColor', 'white', 'Position', [0.62 0.735 0.3 0.2]);
+    uicontrol('Parent', panel5, 'Style', 'pushbutton', 'String', 'Plot Convex Hull', 'Position', [20, 20, 250, 30], 'Callback', @plotConvexHullCallback);
+
+    % Panel for p2p and RMS Analysis (Column 2, below Panel 5)
+    panel6 = uipanel('Parent', mainWindow, 'Title', 'p2p and RMS Analysis', 'FontSize', 12, ...
+                     'BackgroundColor', 'white', 'Position', [0.62 0.265 0.3 0.4]);
+    
+    % Positioning checkboxes vertically
+    handles.p2pCheckbox = uicontrol('Parent', panel6, 'Style', 'checkbox', 'String', 'p2p', ...
+                                    'Position', [20, 145, 150, 20], 'Value', 1);
+    handles.maxP2pCheckbox = uicontrol('Parent', panel6, 'Style', 'checkbox', 'String', 'Max p2p', ...
+                                       'Position', [20, 125, 150, 20]);
+    handles.avgP2pCheckbox = uicontrol('Parent', panel6, 'Style', 'checkbox', 'String', 'Avg p2p', ...
+                                       'Position', [20, 105, 150, 20]);
+    handles.minP2pCheckbox = uicontrol('Parent', panel6, 'Style', 'checkbox', 'String', 'Min p2p', ...
+                                       'Position', [20, 85, 150, 20]);
+    handles.rmsCheckbox = uicontrol('Parent', panel6, 'Style', 'checkbox', 'String', 'RMS', ...
+                                    'Position', [20, 65, 150, 20]);
+    
+    % Positioning buttons vertically below the checkboxes
+    uicontrol('Parent', panel6, 'Style', 'pushbutton', 'String', 'Analyze', ...
+              'Position', [20, 35, 150, 30], 'Callback', @p2pRMSAnalyzeCallback);
+    uicontrol('Parent', panel6, 'Style', 'pushbutton', 'String', 'Check Results', ...
+              'Position', [20, 5, 150, 30], 'Callback', @checkp2pRMSResultsCallback);
+
+    % Panel for Loading Data from Excel (Column 2)
+    panel7 = uipanel('Parent', mainWindow, 'Title', 'Load Results from Excel', 'FontSize', 12, ...
+                     'BackgroundColor', 'white', 'Position', [0.62 0.05 0.3 0.15]);
+    
+    % Button for Loading Data from Excel
+    uicontrol('Parent', panel7, 'Style', 'pushbutton', 'String', 'Load Data from Excel', ...
+              'Position', [20, 20, 200, 30], 'Callback', @loadFromExcelCallback);
+
+
+    % Store the handles structure
+    guidata(mainWindow, handles);
+
+    %% Callback Functions
+    function loadDataCallback(~, ~)
+        [files_name, files_path] = uigetfile(fullfile(dataPath, '*.mat'));
+        if isequal(files_name, 0)
+            disp('User selected Cancel');
+            return;
+        else
+            decOutPath = fullfile(files_path, files_name);
+            loadedData = load(decOutPath);
+            SIG = loadedData.SIG;
+            MUPulses = loadedData.MUPulses;
+            MUIDs = loadedData.MUIDs;
+            ref_signal = loadedData.ref_signal; 
+            force = ref_signal(1, :); 
+            time = (0:size(force, 2) - 1) / fsamp; 
+            disp('Data loaded successfully');
+            
+            % Initialize or reset MUAP-related variables
+            MUAPp2p = {};
+            MUAPs = {};
+            MU_ID = {};
+
+            % Data loaded successfully
+            msg = msgbox('Data loaded successfully!', 'Success');
+            pause(1.5); 
+            try
+                delete(msg);
+            catch
+            end
+%------------------ KNOB
+            % Prepare signal
+            for r = 1:size(SIG, 1)
+                for c = 1:size(SIG, 2)
+                    try
+                        SIG{r, c} = lpbutter(SIG{r, c}, 500, fsamp);
+                        SIG{r, c} = hpbutter(SIG{r, c}, 20, fsamp);
+                    catch
+                    end
+                end
+            end
+
+            flipSIG = SIG; 
+
+            singleDifferential = get(singleDiffCheckbox, 'Value');
+            if singleDifferential
+                % Single differential across rows
+                newSigRowDiff = cell(size(flipSIG, 1) - 1, size(flipSIG, 2));
+                for r = 1:size(flipSIG, 1) - 1
+                    for c = 1:size(flipSIG, 2)
+                        if ~isempty(flipSIG{r, c}) && ~isempty(flipSIG{r + 1, c})
+                            newSigRowDiff{r, c} = flipSIG{r, c} - flipSIG{r + 1, c};
+                        end
+                    end
+                end
+
+                % Differential across columns on the result of row differential
+                newSig = cell(size(newSigRowDiff, 1), size(newSigRowDiff, 2) - 1);
+                for r = 1:size(newSigRowDiff, 1)
+                    for c = 1:size(newSigRowDiff, 2) - 1
+                        if ~isempty(newSigRowDiff{r, c}) && ~isempty(newSigRowDiff{r, c + 1})
+                            newSig{r, c} = newSigRowDiff{r, c} - newSigRowDiff{r, c + 1};
+                        end
+                    end
+                end
+            else
+                newSig = flipSIG;
+            end
+%------------------ KNOB DONE
+%------------------ SWITCH DONE
+            % Ensure MUPulses is a cell array
+            if isnumeric(MUPulses)
+                MUPulses = num2cell(MUPulses);
+            end
+
+            % Remove empty cells
+            emptyCells = cellfun(@isempty, MUPulses);
+            MUPulses(emptyCells) = [];
+            MUIDs(emptyCells) = [];
+
+            % Collect MUAPs
+            MUAPs = [];
+            MUAPrms = [];
+            MUAPp2p = [];
+            MU_ID = [];
+
+            for m = 1:length(MUPulses)
+                [MUAPs{end + 1}, MUAPrms{end + 1}, MUAPp2p{end + 1}, ~] = extractMUAPs_Luigi(newSig, MUPulses{m}, fsamp);
+
+                if length(MUIDs{m}) < 10
+                    MU_ID{end + 1} = MUIDs{m};
+                else
+                    MU_ID{end + 1} = 'MUID error';
+                end
+            end
+
+            % Assign calculated data to the base workspace
+            assignin('base', 'MUAPs', MUAPs);
+            assignin('base', 'MUAPp2p', MUAPp2p);
+            assignin('base', 'MU_ID', MU_ID);
+            assignin('base', 'MUPulses', MUPulses);
+            assignin('base', 'MUIDs', MUIDs);
+
+            % Ensure MUIDs is a column vector
+            MUIDs = MUIDs(:);            
+            
+
+
+
+            % Initialize cv_manual, recruitment_force, derecruitment_force, cv_auto, and cv_final with MU names and NaN
+            cv_manual = [MUIDs, num2cell(NaN(length(MUIDs), 1))];
+            recruitment_force = [MUIDs, num2cell(NaN(length(MUIDs), 1))];
+            derecruitment_force = [MUIDs, num2cell(NaN(length(MUIDs), 1))];
+            cv_auto = [MUIDs, num2cell(NaN(length(MUIDs), 1))];
+            cv_final = [MUIDs, num2cell(NaN(length(MUIDs), 1))];
+
+            % Reset analysis results
+            p2pResults = {};
+            maxP2pResults = [];
+            avgP2pResults = [];
+            minP2pResults = [];
+            rmsResults = {};
+        end
+    end
+
+
+%------------------ SWITCH DONE
+
+
+
+
+
+% -------------------------p2p and RMS Analysis of MUAP TABLE
+    function p2pRMSAnalyzeCallback(~, ~)
+%------------------ Individual SWITCH DONE   
+        % Initialize the results
+        p2pResults = MUAPp2p;
+        maxP2pResults = cellfun(@(x) max(x(:)), MUAPp2p);
+        avgP2pResults = cellfun(@(x) mean(x(:)), MUAPp2p);
+        minP2pResults = cellfun(@(x) min(x(:)), MUAPp2p);
+        rmsResults = MUAPrms;
+    
+        % Store results in the base workspace
+        assignin('base', 'p2pResults', p2pResults);
+        assignin('base', 'maxP2pResults', maxP2pResults);
+        assignin('base', 'avgP2pResults', avgP2pResults);
+        assignin('base', 'minP2pResults', minP2pResults);
+        assignin('base', 'rmsResults', rmsResults);
+ %------------------ Individual SWITCH DONE      
+        % Notify the user
+        msg = msgbox('Analysis complete. Results saved.', 'Success');
+        pause(1.5);
+        try
+            delete(msg);
+        catch
+        end
+    end
+
+    function checkp2pRMSResultsCallback(~, ~)
+    
+        % Create a new figure for the popup
+        resultWindow = figure('Name', 'Check Results', 'Position', [400, 300, 300, 200], 'Color', [0.94 0.94 0.94]);
+    
+        % Dropdown for selecting MU
+        uicontrol('Parent', resultWindow, 'Style', 'text', 'String', 'Select MU:', 'Position', [20, 140, 100, 20]);
+        muDropdown = uicontrol('Parent', resultWindow, 'Style', 'popupmenu', ...
+                               'String', MU_ID, 'Position', [120, 140, 150, 20], 'Tag', 'muDropdown');
+    
+        % Dropdown for selecting result type
+        uicontrol('Parent', resultWindow, 'Style', 'text', 'String', 'Select Analysis:', 'Position', [20, 100, 100, 20]);
+        analysisDropdown = uicontrol('Parent', resultWindow, 'Style', 'popupmenu', ...
+                                     'String', {'p2p', 'Max p2p', 'Avg p2p', 'Min p2p', 'RMS'}, ...
+                                     'Position', [120, 100, 150, 20], 'Tag', 'analysisDropdown');
+    
+        % Button to show the result
+        uicontrol('Parent', resultWindow, 'Style', 'pushbutton', 'String', 'Show Result', ...
+                  'Position', [100, 50, 100, 30], 'Callback', @(~, ~) showp2pRMSResultCallback(muDropdown, analysisDropdown));
+    end
+
+
+    function showp2pRMSResultCallback(muDropdown, analysisDropdown)
+        % Get selected MU and analysis type
+        selectedMU = muDropdown.Value;
+        selectedAnalysis = analysisDropdown.Value;
+    
+        % Initialize the table data
+        tableData = [];
+    
+        % Retrieve the selected result based on the dropdown selections
+        switch selectedAnalysis
+            case 1
+                if ~isempty(p2pResults)
+                    tableData = p2pResults{selectedMU};
+                end
+            case 2
+                if ~isempty(maxP2pResults)
+                    tableData = maxP2pResults(selectedMU);
+                end
+            case 3
+                if ~isempty(avgP2pResults)
+                    tableData = avgP2pResults(selectedMU);
+                end
+            case 4
+                if ~isempty(minP2pResults)
+                    tableData = minP2pResults(selectedMU);
+                end
+            case 5
+                if ~isempty(rmsResults)
+                    tableData = rmsResults{selectedMU};
+                end
+        end
+    
+        % Check if the tableData is empty
+        if isempty(tableData)
+            errordlg('No data available for the selected Motor Unit and analysis.', 'No Data');
+            return;
+        end
+    
+        % Prepare the data for display in the table
+        if isnumeric(tableData) && isvector(tableData)
+            % Convert row vector to column vector if necessary
+            if isrow(tableData)
+                tableData = tableData';
+            end
+            tableData = num2cell(tableData); % Convert numeric array to cell array
+        elseif isnumeric(tableData) && ismatrix(tableData)
+            % Convert numeric matrix to cell array
+            tableData = num2cell(tableData);
+        else
+            errordlg('Unsupported data type for display.', 'Error');
+            return;
+        end
+    
+        % Determine number of rows and columns
+        numColumns = size(tableData, 2);
+        numRows = size(tableData, 1);
+        
+        % Set a minimum size for the table and scale based on content
+        rowHeight = 20;
+        colWidth = 60;
+        figWidth = max(colWidth * numColumns + 40, 200);
+        figHeight = max(rowHeight * numRows + 40, 200);
+    
+        % Create the figure for the table
+        tableFig = figure('Name', 'Results', 'Position', [450, 350, figWidth, figHeight], 'Resize', 'off');
+    
+        % Display the table with dynamic sizing
+        columnName = arrayfun(@(i) num2str(i), 1:numColumns, 'UniformOutput', false); % Simple numeric column names
+        uitable('Parent', tableFig, 'Data', tableData, 'ColumnName', columnName, ...
+                'Position', [10, 10, figWidth - 20, figHeight - 20], 'ColumnWidth', {colWidth});
+    end
+% -------------------------p2p and RMS Analysis of MUAP TABLE
+
+
+
+% --------------------------RECRUITMENT TAB
+    % Function to calculate recruitment forces
+    function calculateRecruitmentThresholdCallback(~, ~)
+
+        % Get user inputs for the recruitment threshold calculation
+        n = str2double(get(nEdit, 'String'));
+        start_time = str2double(get(startTimeEdit, 'String'));
+        end_time = str2double(get(endTimeEdit, 'String'));
+
+        % Ensure data is loaded
+        if isempty(MUPulses) || isempty(ref_signal)
+            errordlg('Please load data first.');
+            return;
+        end
+
+        % If start_time and end_time are not provided, use the full signal
+        if isnan(start_time)
+            start_time = 0;
+        end
+        if isnan(end_time)
+            end_time = max(time);
+        end
+
+        % Filter the time and force data to the specified window
+        time_window_idx = (time >= start_time) & (time <= end_time);
+        time_window = time(time_window_idx);
+        force_window = force(time_window_idx);
+
+        % Calculate the mean force for the first n firings of each motor unit
+        numMUs = length(MUPulses); % Number of motor units
+        mean_recruitment_forces = zeros(numMUs, 1);
+        for i = 1:numMUs
+            firing_times = MUPulses{i} / fsamp; % Convert sample indices to time
+            firing_times_in_window = firing_times((firing_times >= start_time) & (firing_times <= end_time));
+
+            if length(firing_times_in_window) >= n
+                % Recruitment Force (First n Firings)
+                first_n_firing_times = firing_times_in_window(1:n); % Get the times of the first n firings
+                forces_at_first_n_firings = zeros(n, 1);
+                for j = 1:n
+                    [~, idx] = min(abs(time_window - first_n_firing_times(j))); % Find the closest time index in the force data
+                    forces_at_first_n_firings(j) = force_window(idx); % Get the force at each firing time
+                end
+                mean_recruitment_forces(i) = mean(forces_at_first_n_firings); % Calculate mean force
+            else
+                mean_recruitment_forces(i) = Inf; % If less than n firings, set to Inf to be ordered last
+            end
+        end
+
+        % Determine the order of motor units based on the mean recruitment forces
+        [~, sorted_indices] = sort(mean_recruitment_forces);
+
+        % Create the table data
+        table_data = [(1:numMUs)', mean_recruitment_forces];
+        table_data = table_data(sorted_indices, :);
+
+        % Plot Motor Unit Firing Times and Force Curve in the order of recruitment
+        figure;
+        hold on;
+        title('Motor Unit Firing Times and Force Curve in Order of Recruitment');
+        xlabel('Time (s)');
+        ylabel('Motor Units');
+        grid on;
+
+        colors = lines(numMUs); % Generate distinct colors for each motor unit
+
+        for rank = 1:numMUs
+            i = sorted_indices(rank);
+            firing_times = MUPulses{i} / fsamp; % Convert sample indices to time
+            firing_times_in_window = firing_times((firing_times >= start_time) & (firing_times <= end_time));
+            y = repmat(rank, size(firing_times_in_window)); % Create a y-vector for the current MU
+            plot(firing_times_in_window, y, '|', 'MarkerSize', 10, 'Color', colors(i, :), 'DisplayName', sprintf('MU %d', i)); % Plot firing times as vertical lines
+        end
+
+        % Plot the force curve
+        plot(time, force / max(force) * numMUs, 'r', 'LineWidth', 2); % Scale force curve for visualization
+        yticks(1:numMUs);
+        yticklabels(arrayfun(@(x) sprintf('MU %d', x), sorted_indices, 'UniformOutput', false));
+        xlim([start_time, end_time]); % Adjust the x-axis limits based on the interval
+        legend('show');
+        hold off;
+
+        % Display the table with recruitment forces
+        figure('Name', 'Recruitment Forces', 'Position', [100, 100, 400, 300]);
+        uitable('Data', table_data, ...
+                'ColumnName', {'Motor Unit', 'Mean Recruitment Force'}, ...
+                'RowName', [], ...
+                'Position', [20, 20, 360, 260]);
+
+
+
+
+        % Update recruitment_force with calculated forces
+        for i = 1:numMUs
+            recruitment_force{sorted_indices(i), 2} = mean_recruitment_forces(sorted_indices(i));
+        end
+        disp('recruitment_force after updating:');
+        disp(recruitment_force);
+        assignin('base', 'recruitment_force', recruitment_force);
+    end
+
+% --------------------------RECRUITMENT TAB
+
+
+
+
+
+
+% --------------------------DERECRUITMENT TAB
+
+% Function to calculate derecruitment forces
+function calculateDerecruitmentThresholdCallback(~, ~)
+
+    % Get user inputs for the derecruitment threshold calculation
+    n = str2double(get(nEdit, 'String'));
+    start_time = str2double(get(startTimeEdit, 'String'));
+    end_time = str2double(get(endTimeEdit, 'String'));
+
+    % Ensure data is loaded
+    if isempty(MUPulses) || isempty(ref_signal)
+        errordlg('Please load data first.');
+        return;
+    end
+
+    % Set default start and end times if not provided
+    if isnan(start_time), start_time = 0; end
+    if isnan(end_time), end_time = max(time); end
+
+    % Filter time and force data to the specified window
+    time_window_idx = (time >= start_time) & (time <= end_time);
+    time_window = time(time_window_idx);
+    force_window = ref_signal(1, time_window_idx); % Use only force data
+
+    % Calculate mean derecruitment forces
+    numMUs = length(MUPulses);
+    mean_derecruitment_forces = NaN(numMUs, 1);
+    for i = 1:numMUs
+        firing_times = MUPulses{i} / fsamp;
+        firing_times_in_window = firing_times((firing_times >= start_time) & (firing_times <= end_time));
+
+        if length(firing_times_in_window) >= n
+            last_n_firing_times = firing_times_in_window(end-n+1:end);
+            forces_at_last_n_firings = arrayfun(@(ft) force_window(find(time_window >= ft, 1)), last_n_firing_times);
+            mean_derecruitment_forces(i) = mean(forces_at_last_n_firings);
+        else
+            mean_derecruitment_forces(i) = Inf; % If fewer than n firings, set to Inf to be ordered last
+        end
+    end
+
+    % Sort motor units by mean derecruitment forces
+    [~, sorted_indices] = sort(mean_derecruitment_forces);
+
+    % Create sorted table data for display
+    sorted_table_data = [(1:numMUs)', mean_derecruitment_forces];
+    sorted_table_data = sorted_table_data(sorted_indices, :);
+
+    % Display results in a sorted table
+    figure('Name', 'Derecruitment Forces - Sorted by Force', 'Position', [100, 100, 400, 300]);
+    uitable('Data', sorted_table_data, ...
+            'ColumnName', {'Motor Unit', 'Mean Derecruitment Force'}, ...
+            'RowName', [], 'Position', [20, 20, 360, 260]);
+
+    % Plot raster plot and force curve in the order of derecruitment
+    figure('Name', 'Motor Unit Firing Times - Derecruitment Order', 'Position', [550, 100, 600, 400]);
+    hold on;
+    title('Motor Unit Firing Times and Force Curve in Order of Derecruitment');
+    xlabel('Time (s)');
+    ylabel('Motor Units');
+    grid on;
+
+    colors = lines(numMUs); % Generate distinct colors for each motor unit
+
+    % Plot the force curve
+    plot(time_window, force_window / max(force_window) * numMUs, 'r', 'LineWidth', 2); % Scale force curve for visualization
+
+    % Plot each MU's firing times
+    for rank = 1:numMUs
+        i = sorted_indices(rank);
+        firing_times = MUPulses{i} / fsamp; % Convert sample indices to time
+        firing_times_in_window = firing_times((firing_times >= start_time) & (firing_times <= end_time));
+        y = repmat(rank, size(firing_times_in_window)); % Create a y-vector for the current MU
+        plot(firing_times_in_window, y, '|', 'MarkerSize', 10, 'Color', colors(i, :), 'DisplayName', sprintf('MU %d', i)); % Plot firing times as vertical lines
+    end
+
+    % Set y-axis labels and limits
+    yticks(1:numMUs);
+    yticklabels(arrayfun(@(x) sprintf('MU %d', x), sorted_indices, 'UniformOutput', false));
+    xlim([start_time, end_time]); % Adjust the x-axis limits based on the interval
+    legend('show');
+    hold off;
+
+    % Update derecruitment_force with calculated forces
+    derecruitment_force = cell(numMUs, 2);
+    for i = 1:numMUs
+        derecruitment_force{sorted_indices(i), 1} = MU_ID{sorted_indices(i)};
+        derecruitment_force{sorted_indices(i), 2} = mean_derecruitment_forces(sorted_indices(i));
+    end
+    assignin('base', 'derecruitment_force', derecruitment_force);
+end
+
+
+% --------------------------DERECRUITMENT TAB
+     % Function to plot Recruitment vs. Derecruitment forces
+    function plotRecVsDeRecCallback(~, ~)
+    
+        % Ensure the data is loaded
+        if isempty(MUPulses) || isempty(ref_signal)
+            errordlg('Please load data first.');
+            return;
+        end
+    
+        % Extract force data and time vector
+        force = ref_signal(1, :);
+        time = (0:size(force, 2) - 1) / fsamp;
+    
+        numMUs = length(MUPulses);
+        colors = lines(numMUs); % Generate distinct colors for each motor unit
+    
+        % Retrieve user inputs for n, start_time, and end_time
+        n = str2double(get(nEdit, 'String'));
+        start_time = str2double(get(startTimeEdit, 'String'));
+        end_time = str2double(get(endTimeEdit, 'String'));
+    
+        % Validate inputs and set defaults if needed
+        if isnan(n) || n <= 0
+            errordlg('Please enter a valid number of firings (n).', 'Invalid Input');
+            return;
+        end
+        if isnan(start_time), start_time = 0; end
+        if isnan(end_time) || end_time <= start_time, end_time = max(time); end
+    
+        % Filter time and force data to the specified window
+        time_window_idx = (time >= start_time) & (time <= end_time);
+        time_window = time(time_window_idx);
+        force_window = force(time_window_idx);
+    
+        % Initialize arrays for forces
+        mean_recruitment_forces = NaN(numMUs, 1);
+        mean_derecruitment_forces = NaN(numMUs, 1);
+    
+        % Calculate the mean force for the first n and last n firings of each motor unit
+        for i = 1:numMUs
+            firing_times = MUPulses{i} / fsamp;
+            firing_times_in_window = firing_times((firing_times >= start_time) & (firing_times <= end_time));
+    
+            if length(firing_times_in_window) >= n
+                % Recruitment Force (First n Firings)
+                first_n_firing_times = firing_times_in_window(1:n);
+                forces_at_first_n_firings = arrayfun(@(ft) force_window(find(time_window >= ft, 1)), first_n_firing_times);
+                mean_recruitment_forces(i) = mean(forces_at_first_n_firings);
+    
+                % Derecruitment Force (Last n Firings)
+                last_n_firing_times = firing_times_in_window(end-n+1:end);
+                forces_at_last_n_firings = arrayfun(@(ft) force_window(find(time_window >= ft, 1)), last_n_firing_times);
+                mean_derecruitment_forces(i) = mean(forces_at_last_n_firings);
+            end
+        end
+    
+        % Save results in the base workspace
+        recruitment_force = [MUIDs, num2cell(mean_recruitment_forces)];
+        derecruitment_force = [MUIDs, num2cell(mean_derecruitment_forces)];
+        assignin('base', 'recruitment_force', recruitment_force);
+        assignin('base', 'derecruitment_force', derecruitment_force);
+    
+        % Display the forces in a table
+        figure('Name', 'Recruitment and Derecruitment Forces', 'Position', [100, 100, 500, 400]);
+        uitable('Data', [MUIDs, num2cell(mean_recruitment_forces), num2cell(mean_derecruitment_forces)], ...
+                'ColumnName', {'MU', 'Recruitment Force', 'Derecruitment Force'}, ...
+                'RowName', [], 'Position', [20, 20, 460, 360]);
+    
+        % Plot Recruitment vs Derecruitment Forces
+        figure('Name', 'Recruitment vs Derecruitment Forces', 'Position', [600, 400, 600, 400]);
+        hold on;
+        title('Recruitment vs Derecruitment Forces for Motor Units');
+        xlabel('Mean Recruitment Force');
+        ylabel('Mean Derecruitment Force');
+        for i = 1:numMUs
+            if ~isnan(mean_recruitment_forces(i)) && ~isnan(mean_derecruitment_forces(i))
+                scatter(mean_recruitment_forces(i), mean_derecruitment_forces(i), 50, 'filled', 'MarkerFaceColor', colors(i, :));
+                text(mean_recruitment_forces(i), mean_derecruitment_forces(i), sprintf('MU %d', i), 'VerticalAlignment', 'bottom', 'HorizontalAlignment', 'right');
+            end
+        end
+        grid on;
+        % Add a diagonal reference line for visual comparison
+        min_force = min([mean_recruitment_forces; mean_derecruitment_forces]);
+        max_force = max([mean_recruitment_forces; mean_derecruitment_forces]);
+        plot([min_force, max_force], [min_force, max_force], '--r');
+        hold off;
+    end
+
+
+
+
+
+    function automaticCVCallback(~, ~)
+
+        % Display a loading indicator
+        hWaitbar = waitbar(0, 'Stay there, Processing data...');
+        cleanup = onCleanup(@() delete(hWaitbar)); % Ensure waitbar closes even if there is an error
+
+        cv_auto = {}; 
+
+        % Prepare signal
+        for r = 1:size(SIG, 1)
+            for c = 1:size(SIG, 2)
+                try
+                    SIG{r, c} = lpbutter(SIG{r, c}, 500, fsamp);
+                    SIG{r, c} = hpbutter(SIG{r, c}, 20, fsamp);
+                catch
+                end
+            end
+        end
+
+        flipSIG = SIG; 
+
+        % Perform double differential if needed
+        singleDifferential = get(singleDiffCheckbox, 'Value');
+        if singleDifferential
+            % Single differential across rows
+            newSigRowDiff = cell(size(flipSIG, 1) - 1, size(flipSIG, 2));
+            for r = 1:size(flipSIG, 1) - 1
+                for c = 1:size(flipSIG, 2)
+                    if ~isempty(flipSIG{r, c}) && ~isempty(flipSIG{r + 1, c})
+                        newSigRowDiff{r, c} = flipSIG{r, c} - flipSIG{r + 1, c};
+                    end
+                end
+            end
+
+            % Differential across columns on the result of row differential
+            newSig = cell(size(newSigRowDiff, 1), size(newSigRowDiff, 2) - 1);
+            for r = 1:size(newSigRowDiff, 1)
+                for c = 1:size(newSigRowDiff, 2) - 1
+                    if ~isempty(newSigRowDiff{r, c}) && ~isempty(newSigRowDiff{r, c + 1})
+                        newSig{r, c} = newSigRowDiff{r, c} - newSigRowDiff{r, c + 1};
+                    end
+                end
+            end
+        else
+            newSig = flipSIG;
+        end
+
+        % Collect MUAPs
+        MUAPs = [];
+        MUAPrms = [];
+        MUAPp2p = [];
+        MU_ID = [];
+
+        % Remove empty cells
+        emptyCells = cellfun(@isempty, MUPulses);
+        MUPulses(emptyCells) = [];
+        MUIDs(emptyCells) = [];
+
+        for m = 1:length(MUPulses)
+            [MUAPs{end + 1}, MUAPrms{end + 1}, MUAPp2p{end + 1}, ~] = extractMUAPs_Luigi(newSig, MUPulses{m}, fsamp);
+
+            if length(MUIDs{m}) < 10
+                MU_ID{end + 1} = MUIDs{m};
+            else
+                MU_ID{end + 1} = 'MUID error';
+            end
+        end
+
+        % Loop through all MUs and calculate CV
+        for MU_number = 1:length(MU_ID)
+            try
+                % Normalize MUAPp2p and find significant channels
+                MUAPp2p_matrix = cell2mat(MUAPp2p(MU_number));
+                MUAPp2p_normalized = MUAPp2p_matrix / max(MUAPp2p_matrix(:));
+                significantChannels = MUAPp2p_normalized >= 0.2;
+
+                % Calculate polarity matrix
+                polarityMatrix = findChannelPolarity(MUAPs, MU_number);
+
+                % Calculate cross-correlation scores using MUAPs channels of the selected MU
+                crossCorrScores = zeros(size(MUAPs{MU_number}, 1) - 1, size(MUAPs{MU_number}, 2));
+                for r = 1:size(MUAPs{MU_number}, 1) - 1
+                    for c = 1:size(MUAPs{MU_number}, 2)
+                        if ~isempty(MUAPs{MU_number}{r, c}) && ~isempty(MUAPs{MU_number}{r + 1, c})
+                            [corrVal, ~] = xcorr(mean(MUAPs{MU_number}{r, c}, 1), mean(MUAPs{MU_number}{r + 1, c}, 1), 'coeff');
+                            crossCorrScores(r, c) = max(abs(corrVal));
+                        end
+                    end
+                end
+
+% AUTO CV SWITCH (DIFFICULT)---------------------X-X-X-X-X-X-X--X-X-X-X-X-X-X--X
+                % Select columns based on significant channels and cross-correlation scores
+                validColumns = [];
+                numSignificant = sum(significantChannels);
+                for c = 1:size(MUAPs{MU_number}, 2)
+                    if numSignificant(c) >= 3
+                        validColumns = [validColumns, c];
+                    end
+                end
+
+                % Sort columns by the number of significant channels
+                [~, sortOrder] = sort(numSignificant(validColumns), 'descend');
+                sortedColumns = validColumns(sortOrder);
+
+                % Find columns and rows for CV analysis based on criteria
+                selectedColumn = [];
+                selectedRows = [];
+                for c = sortedColumns
+                    % Find significant rows
+                    sigRows = find(significantChannels(:, c));
+
+                    % Check cross-correlation and polarity continuation
+                    validRows = [];
+                    for i = 1:length(sigRows) - 1
+                        if crossCorrScores(sigRows(i), c) > 0.7 && strcmp(polarityMatrix(sigRows(i), c), polarityMatrix(sigRows(i + 1), c))
+                            validRows = [validRows, sigRows(i), sigRows(i + 1)];
+                        end
+                        if length(validRows) >= 3
+                            break;
+                        end
+                    end
+
+                    if length(validRows) >= 3
+                        % Ensure all selected rows have the same polarity
+                        polarities = polarityMatrix(validRows, c);
+                        if all(strcmp(polarities, polarities(1)))
+                            selectedColumn = c;
+                            selectedRows = unique(validRows);
+                            break;
+                        end
+                    end
+                end
+
+                if isempty(selectedRows)
+                    error('No suitable rows and columns found for CV analysis.');
+                end
+
+%AUTO CV SWITCH (DIFFICULT)---------------------X-X-X-X-X-X-X--X-X-X-X-X-X-X--X
+                % Calculate Conduction Velocity for the selected MU
+                ied = 8.5; % Inter-electrode distance in mm
+                muSig = MUAPs{MU_number};
+
+                % Ensure correct order of rows
+                if length(selectedRows) >= 3
+                    signal = muSig(selectedRows, selectedColumn);
+                else
+                    error('Not enough rows meet the criteria for CV calculation.');
+                end
+
+                % Convert the signal cell to matrix
+                sig = cell2mat(signal);
+
+                % Estimate initial teta for CV calculation
+                initial_teta = find_mle_teta(sig(2, :), sig(3, :), ied, fsamp);
+
+                % Calculate CV using MLE
+                [cv, teta] = mle_cv_est(sig, initial_teta, ied, fsamp);
+
+                % Store the CV for the selected MU
+                cv_auto{end + 1, 1} = MU_ID{MU_number};
+                cv_auto{end, 2} = abs(cv);
+            catch
+                % In case of any error, store NaN for CV
+                cv_auto{end + 1, 1} = MU_ID{MU_number};
+                cv_auto{end, 2} = NaN;
+            end
+        end
+
+        % Display the result
+        assignin('base', 'cv_auto', cv_auto);
+
+        % Close the waitbar after finishing the task
+        delete(hWaitbar);
+
+        % Display the cv_auto results in a popup window with a table
+        if ~isempty(cv_auto)
+            cvAutoFig = figure('Name', 'CV Auto Results', 'Position', [100, 100, 400, 300]);
+            uitable('Parent', cvAutoFig, 'Data', cv_auto, 'ColumnName', {'Motor Unit', 'Automatic Conduction Velocity (m/s)'}, 'Position', [20, 20, 360, 260]);
+            uiwait(cvAutoFig); 
+        else
+            msgbox('No CV data available.', 'Info');
+        end
+    end
+
+
+    function saveInExcelCallback(~, ~)
+    
+        % Prompt the user to select a folder and specify a file name
+        [fileName, pathName] = uiputfile('*.xlsx', 'Save Excel File As', 'Results.xlsx');
+        if isequal(fileName, 0) || isequal(pathName, 0)
+            disp('User canceled the file save operation.');
+            return;
+        end
+    
+        % Prepare data for the Excel file
+        muNumbers = (1:size(cv_final, 1))'; % Generate MU numbers as a column vector
+        muNames = cv_final(:, 1); % MU names from cv_final
+        cvValues = cv_final(:, 2); % CV values from cv_final
+        recruitmentForces = recruitment_force(:, 2); % Recruitment Force values
+        derecruitmentForces = derecruitment_force(:, 2); % Derecruitment Force values
+    
+        % Combine data into a cell array for writing to Excel
+        dataToSave = [{'MU Number', 'MU', 'CV', 'Recruitment Force', 'Derecruitment Force'}; ...
+                      num2cell(muNumbers), muNames, cvValues, recruitmentForces, derecruitmentForces];
+    
+        % Construct the full file path
+        fullFilePath = fullfile(pathName, fileName);
+    
+        % Write data to Excel file
+        try
+            writetable(cell2table(dataToSave(2:end, :), 'VariableNames', dataToSave(1, :)), fullFilePath);
+            disp(['Results saved successfully to ', fullFilePath]);
+        catch exception
+            disp('Error while saving to Excel file:');
+            disp(exception.message);
+        end
+    end
+
+function showResultsCallback(~, ~)
+    % Store figure handles in a global variable
+    global figHandles;
+    figHandles = struct();
+    
+    % Retrieve data from the base workspace
+    try
+        cv_auto = evalin('base', 'cv_auto');
+    catch
+        cv_auto = {};
+        disp('cv_auto does not exist.');
+    end
+
+    try
+        recruitment_force = evalin('base', 'recruitment_force');
+    catch
+        recruitment_force = {};
+        disp('recruitment_force does not exist.');
+    end
+    
+    try
+        derecruitment_force = evalin('base', 'derecruitment_force');
+    catch
+        derecruitment_force = {};
+        disp('derecruitment_force does not exist.');
+    end
+
+    % Replace non-NaN entries from cv_manual in cv_final
+    if ~isempty(cv_auto)
+        cv_final = cv_auto;
+        if ~isempty(cv_manual)
+            for i = 1:size(cv_manual, 1)
+                if ~isnan(cv_manual{i, 2})
+                    cv_final{i, 2} = cv_manual{i, 2};
+                end
+            end
+        end
+    else
+        cv_final = {};
+    end
+
+    % Create a common CloseRequestFcn for all figures
+    function closeAllFigures(~, ~)
+        % Close all figures if they exist
+        fieldNames = fieldnames(figHandles);
+        for i = 1:numel(fieldNames)
+            if ishandle(figHandles.(fieldNames{i}))
+                delete(figHandles.(fieldNames{i}));
+            end
+        end
+    end
+
+    % Display cv_auto if available
+    if ~isempty(cv_auto)
+        figHandles.cvAutoFig = figure('Name', 'cv_auto Results', 'Position', [50, 100, 400, 300]);
+        uitable('Parent', figHandles.cvAutoFig, 'Data', cv_auto, ...
+            'ColumnName', {'Motor Unit', 'Automatic Conduction Velocity (m/s)'}, ...
+            'Position', [20, 20, 360, 260]);
+    else
+        disp('cv_auto is empty or not available.');
+    end
+
+    % Display recruitment_force if available
+    if ~isempty(recruitment_force)
+        figHandles.recruitmentForceFig = figure('Name', 'Recruitment Force Results', 'Position', [350, 100, 400, 300]);
+        uitable('Parent', figHandles.recruitmentForceFig, 'Data', recruitment_force, ...
+            'ColumnName', {'Motor Unit', 'Mean Recruitment Force'}, ...
+            'Position', [20, 20, 360, 260]);
+    else
+        disp('recruitment_force is empty or not available.');
+    end
+
+    % Display derecruitment_force if available
+    if ~isempty(derecruitment_force)
+        figHandles.derecruitmentForceFig = figure('Name', 'Derecruitment Force Results', 'Position', [750, 100, 400, 300]);
+        uitable('Parent', figHandles.derecruitmentForceFig, 'Data', derecruitment_force, ...
+            'ColumnName', {'Motor Unit', 'Mean Derecruitment Force'}, ...
+            'Position', [20, 20, 360, 260]);
+    else
+        disp('derecruitment_force is empty or not available.');
+    end
+
+    % Display cv_final
+    if ~isempty(cv_final)
+        figHandles.cvFinalFig = figure('Name', 'cv_final Results', 'Position', [1100, 100, 400, 300]);
+        uitable('Parent', figHandles.cvFinalFig, 'Data', cv_final, ...
+            'ColumnName', {'Motor Unit', 'Final Conduction Velocity (m/s)'}, ...
+            'Position', [20, 20, 360, 260]);
+    else
+        disp('cv_final is empty.');
+    end
+end
+
+
+    function plotConvexHullCallback(~, ~)
+        % Check if MUAP data is not loaded
+        if isempty(MUAPp2p) || isempty(MUAPs)
+            errordlg('MUAP data is not loaded. Please load data first.');
+            return;
+        end
+
+        % Display a loading indicator
+        hWaitbar = waitbar(0, 'Stay there, Processing data...');
+        cleanup = onCleanup(@() delete(hWaitbar)); % Ensure waitbar closes even if there is an error
+
+        % Define threshold and grid coordinates
+        thrs = 20/100; 
+        [X, Y] = meshgrid(1:7, 1:8); 
+        grid_crds = [reshape(X, 56, 1), reshape(Y, 56, 1)];
+        fillColor = [0.96, 0.76, 0.56]; 
+
+        % Prepare signal
+        for r = 1:size(SIG, 1)
+            for c = 1:size(SIG, 2)
+                try
+                    SIG{r, c} = lpbutter(SIG{r, c}, 500, fsamp);
+                    SIG{r, c} = hpbutter(SIG{r, c}, 20, fsamp);
+                catch
+                end
+            end
+        end
+
+        flipSIG = SIG; 
+
+        % Retrieve the value of the single differential checkbox
+        singleDifferential = get(singleDiffCheckbox, 'Value');
+        if singleDifferential
+            % Single differential across rows
+            newSigRowDiff = cell(size(flipSIG, 1) - 1, size(flipSIG, 2));
+            for r = 1:size(flipSIG, 1) - 1
+                for c = 1:size(flipSIG, 2)
+                    if ~isempty(flipSIG{r, c}) && ~isempty(flipSIG{r + 1, c})
+                        newSigRowDiff{r, c} = flipSIG{r, c} - flipSIG{r + 1, c};
+                    end
+                end
+            end
+
+            % Differential across columns on the result of row differential
+            newSig = cell(size(newSigRowDiff, 1), size(newSigRowDiff, 2) - 1);
+            for r = 1:size(newSigRowDiff, 1)
+                for c = 1:size(newSigRowDiff, 2) - 1
+                    if ~isempty(newSigRowDiff{r, c}) && ~isempty(newSigRowDiff{r, c + 1})
+                        newSig{r, c} = newSigRowDiff{r, c} - newSigRowDiff{r, c + 1};
+                    end
+                end
+            end
+        else
+            newSig = flipSIG;
+        end
+
+        % Ensure MUPulses is a cell array
+        if isnumeric(MUPulses)
+            MUPulses = num2cell(MUPulses);
+        end
+
+        % Remove empty cells
+        emptyCells = cellfun(@isempty, MUPulses);
+        MUPulses(emptyCells) = [];
+        MUIDs(emptyCells) = [];
+
+        % Collect MUAPs
+        MUAPs = [];
+        MUAPrms = [];
+        MUAPp2p = [];
+        MU_ID = [];
+
+        for m = 1:length(MUPulses)
+            [MUAPs{end + 1}, MUAPrms{end + 1}, MUAPp2p{end + 1}, ~] = extractMUAPs_Luigi(newSig, MUPulses{m}, fsamp);
+
+            if length(MUIDs{m}) < 10
+                MU_ID{end + 1} = MUIDs{m};
+            else
+                MU_ID{end + 1} = 'MUID error';
+            end
+        end
+
+        iMUAPp2p = MUAPp2p;
+        iMUAPs = MUAPs;
+        iNMUs = length(iMUAPs); 
+
+        % Close the waitbar after finishing the task
+        delete(hWaitbar);
+
+        h = figure;
+        for j = 1:iNMUs
+            subplot(ceil(iNMUs / 3), 3, j); 
+            plot(grid_crds(:,2), grid_crds(:,1), 'b*'); hold on; 
+            title(['MU ' MU_ID{j}]);
+
+            % Flip MUAPs to match plotting orientation
+            jMUAPp2p = flip(iMUAPp2p{j}, 1);
+
+            % Identify MUAPs above the threshold
+            [sRows, sColumns] = find(jMUAPp2p >= thrs * max(jMUAPp2p, [], 'all'));
+            sRows = 1 + (size(jMUAPp2p, 1) - sRows); 
+            plot(sColumns, sRows, 'r*');
+            set(gca, 'XLim', [0, 9], 'YLim', [0, 8]);
+
+            % Convex hull calculation and plotting
+            P = [sColumns, sRows];
+            [k, av] = convhull(P); 
+            plot(P(k, 1), P(k, 2));
+            fill(P(k, 1), P(k, 2), fillColor, 'FaceColor', fillColor, 'EdgeColor', 'none', 'FaceAlpha', 0.5);
+            text(6.5, 7.5, ['Area = ', num2str(av)]);
+        end
+        set(h, 'Color', [1, 1, 1], 'WindowState', 'maximized');
+    end
+
+    function openVisWindow(~, ~)
+        % Prepare signal
+        for r = 1:size(SIG, 1)
+            for c = 1:size(SIG, 2)
+                try
+                    SIG{r, c} = lpbutter(SIG{r, c}, 500, fsamp);
+                    SIG{r, c} = hpbutter(SIG{r, c}, 20, fsamp);
+                catch
+                end
+            end
+        end
+
+        flipSIG = SIG; 
+
+        singleDifferential = get(singleDiffCheckbox, 'Value');
+        if singleDifferential
+            % Single differential across rows
+            newSigRowDiff = cell(size(flipSIG, 1) - 1, size(flipSIG, 2));
+            for r = 1:size(flipSIG, 1) - 1
+                for c = 1:size(flipSIG, 2)
+                    if ~isempty(flipSIG{r, c}) && ~isempty(flipSIG{r + 1, c})
+                        newSigRowDiff{r, c} = flipSIG{r, c} - flipSIG{r + 1, c};
+                    end
+                end
+            end
+
+            % Differential across columns on the result of row differential
+            newSig = cell(size(newSigRowDiff, 1), size(newSigRowDiff, 2) - 1);
+            for r = 1:size(newSigRowDiff, 1)
+                for c = 1:size(newSigRowDiff, 2) - 1
+                    if ~isempty(newSigRowDiff{r, c}) && ~isempty(newSigRowDiff{r, c + 1})
+                        newSig{r, c} = newSigRowDiff{r, c} - newSigRowDiff{r, c + 1};
+                    end
+                end
+            end
+        else
+            newSig = flipSIG;
+        end
+
+        % Ensure MUPulses is a cell array
+        if isnumeric(MUPulses)
+            MUPulses = num2cell(MUPulses);
+        end
+
+        % Remove empty cells
+        emptyCells = cellfun(@isempty, MUPulses);
+        MUPulses(emptyCells) = [];
+        MUIDs(emptyCells) = [];
+
+        % Collect MUAPs
+        MUAPs = [];
+        MUAPrms = [];
+        MUAPp2p = [];
+        MU_ID = [];
+
+        for m = 1:length(MUPulses)
+            [MUAPs{end + 1}, MUAPrms{end + 1}, MUAPp2p{end + 1}, ~] = extractMUAPs_Luigi(newSig, MUPulses{m}, fsamp);
+
+            if length(MUIDs{m}) < 10
+                MU_ID{end + 1} = MUIDs{m};
+            else
+                MU_ID{end + 1} = 'MUID error';
+            end
+        end
+
+        % Visualization Window
+        visWindow = figure('Name', 'CV Investigator', 'Position', [200, 200, 600, 600]);
+        
+        % Motor Unit Dropdown
+        uicontrol('Style', 'text', 'String', 'Motor Unit', 'Position', [20, 400, 100, 20], 'Parent', visWindow);
+        muDropdown = uicontrol('Style', 'popupmenu', 'String', 1:length(MU_ID), 'Position', [140, 400, 100, 25], 'Parent', visWindow, 'Callback', @updateVis);
+        
+        % Column Input
+        uicontrol('Style', 'text', 'String', 'Selected Column', 'Position', [20, 360, 100, 20], 'Parent', visWindow);
+        colEdit = uicontrol('Style', 'edit', 'Position', [140, 360, 100, 25], 'Parent', visWindow);
+        
+        % Start Row Input
+        uicontrol('Style', 'text', 'String', 'Start Row', 'Position', [20, 320, 100, 20], 'Parent', visWindow);
+        startRowEdit = uicontrol('Style', 'edit', 'Position', [140, 320, 100, 25], 'Parent', visWindow);
+        
+        % End Row Input
+        uicontrol('Style', 'text', 'String', 'End Row', 'Position', [20, 280, 100, 20], 'Parent', visWindow);
+        endRowEdit = uicontrol('Style', 'edit', 'Position', [140, 280, 100, 25], 'Parent', visWindow);
+        
+        % Calculate Button
+        uicontrol('Style', 'pushbutton', 'String', 'Calculate', 'Position', [20, 240, 100, 30], 'Parent', visWindow, 'Callback', @calculateCVCallback);
+        
+        % Result Text
+        resultText = uicontrol('Style', 'text', 'String', '', 'Position', [20, 180, 550, 50], 'FontSize', 12, 'Parent', visWindow, 'HorizontalAlignment', 'left', 'BackgroundColor', 'white');
+
+        % Initialize Visualization with the first motor unit
+        updateVis();
+
+        function updateVis(~, ~)
+            selectedMU = get(muDropdown, 'Value');
+            plotSelectedMUAPs(MUAPs, MU_ID, fsamp, selectedMU, [1, 1, 1], [0, 0, 0]);
+        end
+
+        function calculateCVCallback(~, ~)
+            % Get user inputs
+            muNumber = get(muDropdown, 'Value');
+            selectedColumn = str2double(get(colEdit, 'String'));
+            startRow = str2double(get(startRowEdit, 'String'));
+            endRow = str2double(get(endRowEdit, 'String'));
+
+            % Calculate Conduction Velocity for the selected MU
+            ied = 8.5; % Inter-electrode distance in mm
+            muSig = MUAPs{muNumber};
+
+            % Ensure correct order of rows
+            if startRow <= endRow
+                signal = muSig(startRow:endRow, selectedColumn);
+            else
+                signal = muSig(startRow:-1:endRow, selectedColumn);
+            end
+
+            % Convert the signal cell to matrix
+            sig = cell2mat(signal);
+
+            % Estimate initial teta for CV calculation
+            initial_teta = find_mle_teta(sig(2, :), sig(3, :), ied, fsamp);
+
+            % Calculate CV using MLE
+            [cv, teta] = mle_cv_est(sig, initial_teta, ied, fsamp);
+
+            % Display the CV for the selected MU
+            set(resultText, 'String', sprintf('Conduction Velocity for MU %d: %.2f m/s', muNumber, abs(cv)));
+            
+            % Update cv_manual with the calculated CV
+            cv_manual{muNumber, 2} = abs(cv);
+            disp('cv_manual after updating with new CV:');
+            disp(cv_manual);
+            assignin('base', 'cv_manual', cv_manual);
+        end
+    end
+end
+
+%% Function to estimate CV via maximum likelihood estimation
+function [cv, teta] = mle_cv_est(sig, initial_teta, ied, fsamp)
+    ied = ied / 1000; 
+    t = initial_teta;
+    teta = 10;
+    trial = 0;
+    epsilon = eps;
+
+    while abs(teta - t) >= 5e-5 && trial < 30
+        trial = trial + 1;
+        teta = t;
+        de1 = 0;
+        de2 = 0;
+
+        for row = 1:size(sig, 1)
+            [de1t, de2t] = derivatives_beamforming(sig, row, teta);
+            de1 = de1 + de1t + epsilon;
+            de2 = de2 + de2t + epsilon;
+        end
+
+        if de2 > 0
+            u = -de1 / de2;
+            if abs(u) > 0.5
+                u = -0.5 * abs(de1) / de1;
+            end
+        else
+            u = -0.5 * abs(de1) / de1;
+        end
+
+        t = teta + u;
+    end
+
+    cv = ied / (teta / fsamp);
+end
+
+%% Function to calculate first and second derivatives for beamforming
+function [de1, de2] = derivatives_beamforming(sig, row, teta)
+    total_rows = size(sig, 1);
+    m = total_rows - 1;
+    total_columns = size(sig, 2);
+    half_of_the_columns = (1:round(total_columns/2));
+
+    position = zeros(size(sig, 1), 1);
+    position(1) = row + 1;
+
+    for i = 2:(row+1)
+        position(i) = i - (row + 1);
+    end
+
+    for i = (row+2):(m+1)
+        position(i) = i - 1;
+    end
+
+    position = position(2:end);
+
+    this_row = sig(row, :);
+    sig(row, :) = [];
+    sig = [this_row; sig];
+
+    sigfft = fft(sig, [], 2);
+
+    term_de1 = zeros(size(half_of_the_columns));
+    term_de2 = zeros(size(half_of_the_columns));
+    term_de12 = zeros(size(half_of_the_columns));
+    term_de22 = zeros(size(half_of_the_columns));
+
+    for i = 1:m
+        for u = (i+1):m
+            s_fft = sigfft(i+1, half_of_the_columns);
+            s_conj = conj(sigfft(u+1, half_of_the_columns));
+            s_exp = exp(1i * 2 * pi * half_of_the_columns * (position(i) - position(u)) * teta / total_columns);
+            s_last = 2 * pi * half_of_the_columns * (position(i) - position(u)) / total_columns;
+            image = imag(s_fft .* s_conj .* s_exp .* s_last);
+            term_de1 = term_de1 - image;
+        end
+    end
+
+    term_de1 = (term_de1 * 2) / (m^2);
+
+    for i = 1:m
+        s_fft = sigfft(i+1, half_of_the_columns);
+        s_exp = exp(1i * 2 * pi * half_of_the_columns * position(i) * teta / total_columns);
+        s_last = 2 * pi * half_of_the_columns * position(i) / total_columns;
+        term_de2 = term_de2 + (s_fft .* s_exp .* s_last);
+    end
+
+    s_conj = conj(sigfft(1, half_of_the_columns));
+    term_de2 = 2 * imag(s_conj .* term_de2) / m;
+
+    de1 = 2 / total_columns * sum(term_de1 + term_de2);
+
+    for i = 1:m
+        for u = (i+1):m
+            s_fft = sigfft(i+1, half_of_the_columns);
+            s_conj = conj(sigfft(u+1, half_of_the_columns));
+            s_exp = exp(1i * 2 * pi * half_of_the_columns * (position(i) - position(u)) * teta / total_columns);
+            s_last = 2 * pi * half_of_the_columns * (position(i) - position(u)) / total_columns;
+            term_de12 = term_de12 - real(s_fft .* s_conj .* s_exp .* (s_last.^2));
+        end
+    end
+
+    term_de12 = (term_de12 * 2) / (m^2);
+
+    for i = 1:m
+        s_fft = sigfft(i+1, half_of_the_columns);
+        s_exp = exp(1i * 2 * pi * half_of_the_columns * position(i) * teta / total_columns);
+        s_last = 2 * pi * half_of_the_columns * position(i) / total_columns;
+        term_de22 = term_de22 + (s_fft .* s_exp .* (s_last.^2));
+    end
+
+    s_conj = conj(sigfft(1, half_of_the_columns));
+    term_de22 = 2 * real(s_conj .* term_de22) / m;
+
+    de2 = 2 / total_columns * sum(term_de12 + term_de22);
+end
+
+%% Function to find initial teta for CV estimation
+function teta = find_mle_teta(sig1, sig2, ied, fsamp)
+    min_cv = 1;
+    max_cv = 10;
+    teta_min = floor(ied / max_cv * fsamp);
+    teta_max = ceil(ied / min_cv * fsamp);
+
+    delay = teta_min:teta_max;
+    corrpos = zeros(size(delay));
+    for idx = 1:length(delay)
+        i = delay(idx);
+        sig1_tosum = sig1(1:end-i);
+        sig2_tosum = sig2((i+1):end);
+        corrpos(idx) = sum(sig1_tosum .* sig2_tosum);
+    end
+
+    [~, pos] = max(corrpos);
+
+    if pos > 1 && pos < length(delay)
+        x = delay(pos-1:pos+1);
+        y = corrpos(pos-1:pos+1);
+        coefs = flip(polyfit(x, y, 2));
+        teta = -coefs(2) / (2 * coefs(1));
+    else
+        teta = pos;
+    end
+end
+
+%% Function to plot selected MUAPs
+function plotSelectedMUAPs(MUAPs, MU_ID, Fsamp, selectedMUs, BackColor, FrontColor)
+    Fontssize1 = 10;
+    YLimMin = 10000;
+    YLimMax = 0;
+    col{1} = FrontColor;
+    col{2} = FrontColor;
+    YLimCorrect = 0.9;
+
+    figure;
+    set(gcf, 'Color', BackColor);
+
+    % Calculate the number of rows and columns based on the number of selected MUs
+    numMUs = length(selectedMUs);
+    if numMUs <= 3
+        R = 1; C = numMUs;
+    elseif numMUs <= 6
+        R = 2; C = ceil(numMUs / 2);
+    elseif numMUs <= 9
+        R = 3; C = 3;
+    elseif numMUs <= 12
+        R = 3; C = 4;
+    elseif numMUs <= 15
+        R = 3; C = 5;
+    elseif numMUs <= 18
+        R = 3; C = 6;
+    elseif numMUs <= 20
+        R = 4; C = 5;
+    elseif numMUs <= 24
+        R = 4; C = 6;
+    elseif numMUs <= 25
+        R = 5; C = 5;
+    elseif numMUs <= 30
+        R = 5; C = 6;
+    elseif numMUs <= 35
+        R = 5; C = 7;
+    elseif numMUs <= 40
+        R = 5; C = 8;
+    else
+        R = 8; C = 8;
+    end
+
+    for MUidIdx = 1:numMUs
+        MUid = selectedMUs(MUidIdx);
+        subplot(R, C, MUidIdx);
+        hold on;
+
+        rY = size(MUAPs{MUid}, 1);
+        cY = size(MUAPs{MUid}, 2);
+
+        for r = 1:rY
+            for c = 1:cY
+                if ~isempty(MUAPs{MUid}{r, c})
+                    T = floor(size(MUAPs{MUid}{r, c}, 2) / 2);
+                end
+            end
+        end
+
+        tmp = [];
+        for r = 1:rY
+            for c = 1:cY
+                mMUAPs = [];
+                if isempty(MUAPs{MUid}{r, c})
+                    tmp(end + 1) = 0;
+                else
+                    for k1 = 1:size(MUAPs{MUid}{r, c}, 1)
+                        [mMUAPs(k1), iMUAPs] = max(abs(MUAPs{MUid}{r, c}(k1, :)));
+                    end
+                    tmp(end + 1) = 1.0 * max(mMUAPs) + eps;
+                end
+                tmp(end) = tmp(end) + eps;
+            end
+        end
+        for r = 1:rY
+            dh(r) = 1.5 * max(tmp);
+        end
+        yLineHight = round(max(tmp) * 100000) / 100;
+        if yLineHight > 10
+            yLineHight = floor(max(tmp) / 10) * 10;
+        end
+        xLineWidth = round(0.02 * Fsamp);
+
+        % Determine the polarity matrix
+        polarityMatrix = findChannelPolarity(MUAPs, MUid);
+
+        % Display the polarity matrix
+        disp(['Polarity Matrix for MU ' num2str(MUid) ':']);
+        disp(polarityMatrix);
+        
+        % Initialize IZ detection matrix
+        IZMatrix = zeros(rY-1, cY);
+        negativePairs = zeros(rY-1, 1);
+
+        for r = 1:rY
+            for c = 1:cY
+                if ~isempty(MUAPs{MUid}{r, c})
+
+                    mMUAPs = [];
+                    if size(MUAPs{MUid}{r, c}, 1) > 1
+                        for k1 = 1:size(MUAPs{MUid}{r, c}, 1)
+                            plot((c - 1) * T * 1.1 + [1:T], MUAPs{MUid}{r, c}(k1, :).' + sum(dh(1:r)), 'Color', [0.6, 0.6, 0.6]);
+                        end
+                    end
+                    plot((c - 1) * (2 * T + 1) * 1.1 + [1:(2 * T + 1)], mean(MUAPs{MUid}{r, c}, 1).' + sum(dh(1:r)), 'LineWidth', 1.0, 'Color', [0.1, 0.1, 0.7]);
+                    [mMUAPs(k1), iMUAPs] = max(abs(mean(MUAPs{MUid}{r, c}, 1)));
+
+                    % Display cross-correlation score
+                    if r < rY
+                        nextSig = MUAPs{MUid}{r+1, c};
+                        if ~isempty(nextSig)
+                            [corrVal, ~] = xcorr(mean(MUAPs{MUid}{r, c}, 1), mean(nextSig, 1), 'coeff');
+                            maxCorr = max(abs(corrVal));
+                            text((c - 0.5) * (2 * T + 1) * 1.1, sum(dh(1:r)) + dh(r)/2, sprintf('%.2f', maxCorr), 'Color', 'r', 'FontSize', Fontssize1, 'HorizontalAlignment', 'center', 'VerticalAlignment', 'top');
+                        end
+                    end
+
+                    % Check for opposite polarity in consecutive channels for IZ
+                    if r < rY
+                        if (polarityMatrix(r, c) == '+' && polarityMatrix(r+1, c) == '-') || ...
+                           (polarityMatrix(r, c) == '-' && polarityMatrix(r+1, c) == '+')
+                            IZMatrix(r, c) = 1;
+                        end
+                    end
+                end
+
+                % Display row and column numbers
+                text(-50, sum(dh(1:r)), sprintf('Row %d', r), 'Color', FrontColor, 'FontSize', Fontssize1, 'HorizontalAlignment', 'right');
+                if r == 1
+                    text((c - 0.5) * (2 * T + 1) * 1.1, -100, sprintf('Col %d', c), 'Color', FrontColor, 'FontSize', Fontssize1, 'HorizontalAlignment', 'center');
+                end
+
+                YLimMax = max([YLimMax, max(mMUAPs) + sum(dh(1:r))]);
+                YLimMin = min([YLimMin, min(mMUAPs) + sum(dh(1:r))]);
+            end
+        end
+
+        % Count opposite pairs and find the row pair with the most negatives
+        maxNegatives = 0;
+        IZRowPair = [0, 0];
+        for r = 1:(rY-1)
+            negativePairs(r) = sum(IZMatrix(r, :));
+            if negativePairs(r) > maxNegatives
+                maxNegatives = negativePairs(r);
+                IZRowPair = [r, r+1];
+            end
+        end
+
+        % Print the row pair with the most negatives
+        fprintf('Row pair with the most opposite pairs: Row %d and Row %d\n', IZRowPair(1), IZRowPair(2));
+
+        % Plot IZ line between the row pair with the most negative pairs
+        if IZRowPair(1) > 0
+            yPos = sum(dh(1:IZRowPair(1))) + dh(IZRowPair(1))/2;
+            line([0, (2 * T + 1) * cY * 1.1], [yPos, yPos], 'Color', 'k', 'LineWidth', 2, 'LineStyle', '--');
+        end
+
+        plot((1) * (2 * T + 1) * 1.1 + [0, 0], -dh(1) + [0, yLineHight], 'Color', FrontColor, 'LineWidth', 1);
+        plot((1) * (2 * T + 1) * 1.1 - [-T / 3, +T / 3], -dh(1) + [0, 0], 'Color', FrontColor, 'LineWidth', 1);
+        plot((1) * (2 * T + 1) * 1.1 - [-T / 3, +T / 3], -dh(1) + [yLineHight, yLineHight], 'Color', FrontColor, 'LineWidth', 1);
+        text((1) * (2 * T + 1) * 1.15 + T / 3, -dh(1) + yLineHight / 2, [num2str(yLineHight) ''], 'VerticalAlignment', 'middle', 'HorizontalAlignment', 'left', 'Color', FrontColor, 'FontSize', Fontssize1);
+        axis tight;
+        hAx = gca;
+        set(hAx, 'Color', BackColor);
+        set(hAx, 'XColor', BackColor);
+        set(hAx, 'YColor', BackColor);
+        set(hAx, 'ZColor', BackColor);
+        set(hAx, 'XTickLabel', []);
+        set(hAx, 'YTickLabel', []);
+        title(['MU ' MU_ID{MUid}], 'Color', FrontColor, 'FontSize', Fontssize1);
+    end
+end
+
+%% Function to find channel polarity
+function polarityMatrix = findChannelPolarity(MUAPs, MU_number)
+    % Initialize the polarity matrix with the same size as the MUAP data
+    muSig = MUAPs{MU_number};
+    [numRows, numCols] = size(muSig);
+    polarityMatrix = strings(numRows, numCols);
+    
+    % Loop through each row and column to determine the polarity
+    for row = 1:numRows
+        for col = 1:numCols
+            if ~isempty(muSig{row, col}) && isnumeric(muSig{row, col})
+                signal = muSig{row, col};  
+                [globalMax, maxIdx] = max(signal);
+                [globalMin, minIdx] = min(signal);
+                
+                % Determine polarity based on the timing of global max and min
+                if maxIdx < minIdx
+                    polarityMatrix(row, col) = '+';
+                else
+                    polarityMatrix(row, col) = '-';
+                end
+            else
+                polarityMatrix(row, col) = 'N/A'; % Handle empty or non-numeric channels
+            end
+        end
+    end
+end
+
+function loadFromExcelCallback(~, ~)
+
+    % Prompt the user to select an Excel file
+    [fileName, pathName] = uigetfile('*.xlsx', 'Select Excel File');
+    if isequal(fileName, 0) || isequal(pathName, 0)
+        disp('User canceled the file selection.');
+        return;
+    end
+    
+    % Construct the full file path
+    fullFilePath = fullfile(pathName, fileName);
+    
+    % Read data from the Excel file
+    try
+        % Reading the data with column names consideration
+        dataFromFile = readtable(fullFilePath);
+        disp(['Data loaded successfully from ', fullFilePath]);
+
+        % Display the actual column names read from the file
+        actualColumnNames = dataFromFile.Properties.VariableNames;
+        disp('Actual column names in the Excel file:');
+        disp(actualColumnNames);
+
+        % Define the required columns with exact names as per the Excel file
+        requiredColumns = {'MUNumber', 'MU', 'CV', 'RecruitmentForce', 'DerecruitmentForce'};
+
+        % Check if all required columns are present
+        missingColumns = setdiff(requiredColumns, actualColumnNames);
+        if ~isempty(missingColumns)
+            error('The following required columns are missing from the Excel file: %s', strjoin(missingColumns, ', '));
+        end
+        
+        % Extract data from the table
+        muNumbers = dataFromFile.MUNumber;
+        muNames = dataFromFile.MU;
+        cvValues = dataFromFile.CV;
+        recruitmentForces = dataFromFile.RecruitmentForce;
+        derecruitmentForces = dataFromFile.DerecruitmentForce;
+        
+        % Store data in the workspace
+        assignin('base', 'muNumbers', muNumbers);
+        assignin('base', 'muNames', muNames);
+        assignin('base', 'cvValues', cvValues);
+        assignin('base', 'recruitmentForces', recruitmentForces);
+        assignin('base', 'derecruitmentForces', derecruitmentForces);
+        
+        % Convert the data to the required format for the GUI variables
+        cv_auto = [table2cell(dataFromFile(:, {'MU'})), num2cell(cvValues)];
+        recruitment_force = [table2cell(dataFromFile(:, {'MU'})), num2cell(recruitmentForces)];
+        derecruitment_force = [table2cell(dataFromFile(:, {'MU'})), num2cell(derecruitmentForces)];
+        
+        % Save the data in the base workspace
+        assignin('base', 'cv_auto', cv_auto);
+        assignin('base', 'recruitment_force', recruitment_force);
+        assignin('base', 'derecruitment_force', derecruitment_force);
+        
+    catch exception
+        disp('Error while loading data from Excel file:');
+        disp(exception.message);
+    end
+end
